@@ -1,3 +1,7 @@
+# Uses the same dataset used for raw and tf_idf, 
+# uses the word2vec package to create a classifier for dense vectors.
+# Uses Logistic Regression, with the appropriate configuration for the model and dataset.
+
 from nltk.tokenize import word_tokenize
 import wikipedia
 from gensim.models import Word2Vec
