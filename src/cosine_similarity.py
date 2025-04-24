@@ -1,3 +1,4 @@
+# 3. Uses cosine similarity, compares two documents and shows which of the documents is most similar.
 import math
 import pandas as pd
 from raw_frequency import fetch_documents, compute_tf, create_vocab
