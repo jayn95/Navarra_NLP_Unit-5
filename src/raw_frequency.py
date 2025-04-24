@@ -1,3 +1,8 @@
+# 1. Uses Wikipedia as the corpus, obtains 5 different topics that serve as the documents, 
+# and creates a term-document matrix.
+# Term-document matrix using raw frequency. 
+
+
 from collections import Counter
 from nltk.tokenize import word_tokenize
 import wikipedia
