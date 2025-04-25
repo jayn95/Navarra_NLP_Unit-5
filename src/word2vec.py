@@ -2,90 +2,76 @@
 # uses the word2vec package to create a classifier for dense vectors.
 # Uses Logistic Regression, with the appropriate configuration for the model and dataset.
 
-from nltk.tokenize import word_tokenize
-import wikipedia
-from gensim.models import Word2Vec
-from sklearn.linear_model import LogisticRegression
-from sklearn.model_selection import train_test_split
-from sklearn.metrics import accuracy_score
-from sklearn.model_selection import cross_val_score
-from sklearn.linear_model import LogisticRegression
-import pandas as pd
 import numpy as np
+import pandas as pd
+from sklearn.model_selection import train_test_split
+from sklearn.linear_model import LogisticRegression
+from sklearn.metrics import accuracy_score
+from gensim.models import Word2Vec
+from nltk.tokenize import word_tokenize
+from nltk.corpus import stopwords
+import string
 
-# Fetch 5 Wikipedia documents
+# Sample dataset of topics and their descriptions
 topics = [
-    "Decision problem",
-    "Algorithm",
-    "Data structure",
-    "Complexity theory",
-    "Graph theory"
+    ("Decision problem", "A decision problem is a problem that can be posed as a yes/no question."),
+    ("Algorithm", "An algorithm is a step-by-step procedure for solving a problem."),
+    ("Data structure", "A data structure is a way to organize and store data for efficient access and modification."),
+    ("Complexity theory", "Complexity theory studies the complexity of computational problems."),
+    ("Graph theory", "Graph theory is the study of graphs, which are mathematical structures used to model pairwise relations between objects.")
 ]
 
-documents = []
-for topic in topics:
-    try:
-        page = wikipedia.page(topic).content
-        text = "\n".join(page.splitlines()[:5])[:1000]  # Limit to 1000 characters
-        tokens = word_tokenize(text.lower())  # Tokenize and normalize
-        cleaned_tokens = [word for word in tokens if word.isalnum()]  # Remove punctuation
-        documents.append(cleaned_tokens)  # Store the cleaned text
-    except wikipedia.exceptions.DisambiguationError as e:
-        print(f"Disambiguation error for {topic}: {e.options[0]}")
-    except Exception as e:
-        print(f"Error fetching page for {topic}: {e}")
+# Prepare the dataset
+data = pd.DataFrame(topics, columns=["label", "text"])
 
-# Train Word2Vec model on the tokenized documents
-model = Word2Vec(sentences=documents, vector_size=100, window=5, min_count=1, workers=4)
-model.save("word2vec.model")
+# Preprocessing function
+def preprocess_text(text):
+    text = text.lower()
+    text = ''.join([char for char in text if char not in string.punctuation])  # Remove punctuation
+    tokens = word_tokenize(text)
+    stop_words = set(stopwords.words('english'))
+    tokens = [word for word in tokens if word not in stop_words]
+    return tokens
 
-# Function to compute average word vectors for each document
-def get_avg_word2vec(doc, model):
-    vectors = [model.wv[word] for word in doc if word in model.wv]
-    if vectors:
-        return np.mean(vectors, axis=0)
-    else:
-        return np.zeros(model.vector_size)
+# Tokenize the text data
+data['tokens'] = data['text'].apply(preprocess_text)
 
-# Create feature vectors for each document
-document_vectors = [get_avg_word2vec(doc, model) for doc in documents]
+# Train the Word2Vec model on the tokens
+word2vec_model = Word2Vec(sentences=data['tokens'], vector_size=100, window=5, min_count=1, sg=0)
 
-# Prepare labels (just for demonstration, assuming topic index as label)
-labels = [0, 1, 2, 3, 4]  # Labels for each document (0 for 'Decision problem', 1 for 'Algorithm', etc.)
+# Function to get the average vector for a sentence
+def get_sentence_vector(tokens, model):
+    vec = np.zeros(100)
+    count = 0
+    for word in tokens:
+        if word in model.wv:
+            vec += model.wv[word]
+            count += 1
+    if count > 0:
+        vec /= count
+    return vec
 
-# Split dataset into train and test sets
-X_train, X_test, y_train, y_test = train_test_split(document_vectors, labels, test_size=0.2, random_state=42)
+# Create the feature vectors for the dataset
+data['vector'] = data['tokens'].apply(lambda x: get_sentence_vector(x, word2vec_model))
 
-# Train Logistic Regression classifier
+# Prepare the features and labels for training
+X = np.vstack(data['vector'].values)  # Convert list of vectors into a numpy array
+y = data['label'].values
+
+# Split the data into training and test sets
+X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.2, random_state=42)
+
+# Train the Logistic Regression model
 clf = LogisticRegression(max_iter=1000)
 clf.fit(X_train, y_train)
 
 # Make predictions
 y_pred = clf.predict(X_test)
 
-# Evaluate model
+# Evaluate the model
 accuracy = accuracy_score(y_test, y_pred)
-print(f"Logistic Regression Accuracy: {accuracy:.4f}")
+print(f"Accuracy: {accuracy * 100:.2f}%")
 
-# You can also display the predicted vs true labels for further analysis
-# predicted_df = pd.DataFrame({'True Label': y_test, 'Predicted Label': y_pred})
-# print(predicted_df)
-
-# Check the size of train and test sets
-print(f"Training set size: {len(X_train)}")
-print(f"Test set size: {len(X_test)}")
-
-# Check a sample document vector to see if it's reasonable
-print("Sample document vector (first document):")
-print(document_vectors[0])
-
-# Print the true and predicted labels to ensure they match the intended output
-predicted_df = pd.DataFrame({'True Label': y_test, 'Predicted Label': y_pred})
-print(predicted_df)
-
-# Example for cross-validation (with more data in your actual case)
-model = LogisticRegression(max_iter=1000)
-scores = cross_val_score(model, document_vectors, labels, cv=5)  # 5-fold cross-validation
-
-print(f"Cross-validation scores: {scores}")
-print(f"Average cross-validation score: {scores.mean()}")
+# Display all predictions
+for true_label, predicted_label in zip(y_test, y_pred):
+    print(f"True Label: {true_label} | Predicted Label: {predicted_label}")
